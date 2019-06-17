@@ -6,72 +6,85 @@
  */
 #include <vector>
 #include <thread>
-#include <omp.h>
+#include "mpi.h"
+#include <iostream>
 
-void process_portion(std::vector<std::vector<double> > *matA, std::vector<std::vector<double> > *matB,
-		std::vector<std::vector<double> > *matC, unsigned start, unsigned tpor){
-	for(unsigned i = start; i < start+tpor; i++){
-		for(unsigned y = 0; y < matB->size(); y++){
-			for(unsigned z = 0; z < matB->size(); z++){
-				(*matC)[i][y] += (*matA)[i][z] * (*matB)[z][y];
-			}
-		}
-	}
-}
-
-
-int main(){
-
+void main_task(int rank, int world_size)
+{
+	int n = 2000;
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
+//	std::vector<std::vector<double> > matC_ref;
 	std::vector<std::vector<double> > matC;
 
-	std::vector<double> tmp(2000);
-
+//	std::vector<double> tmp_filled(2000);
+	std::vector<double> tmp(n);
+//	int x = 0;
+//	for(unsigned i = 0; i < tmp_filled.size();i++)
+//	{
+//		tmp_filled.at(i) = x;
+//		x++;
+//		if(i>10)
+//			x = 0;
+//	}
+//	for(unsigned i = 0; i < tmp.size(); i++){
+//		matA.push_back(tmp_filled);
+//		matB.push_back(tmp_filled);
+//		matC.push_back(tmp);
+//	}
 	for(unsigned i = 0; i < tmp.size(); i++){
 		matA.push_back(tmp);
 		matB.push_back(tmp);
 		matC.push_back(tmp);
 	}
-
-	// compute tread portions
-//    unsigned tpor = tmp.size() / 4;
-//	std::thread first (process_portion, &matA, &matB, &matC, tpor*0, tpor);
-//	std::thread second (process_portion, &matA, &matB, &matC, tpor*1, tpor);
-//	std::thread third (process_portion, &matA, &matB, &matC, tpor*2, tpor);
-//	std::thread fourth (process_portion, &matA, &matB, &matC, tpor*3, tpor);
-//
-//	first.join();
-//	second.join();
-//	third.join();
-//	fourth.join();
-
-	// openmp
-omp_set_num_threads(4);
-//
-#pragma omp parallel for
-   // openmp
-
-    for(unsigned i = 0; i < matA.size(); i++){
-		for(unsigned y = 0; y < matB.size(); y++){
-			for(unsigned z = 0; z < matB.size(); z++){
-				matC[i][y] += matA[i][z] * matB[z][y];
-			}
+	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	int part_size = n / world_size;
+	int part_size_last = part_size + (n % world_size);
+	for(int i = 1; i<world_size;i++)
+	{
+		int size = part_size;
+		if(i == world_size-1)
+			size = part_size_last;
+		for(int j = part_size*i; j < part_size*i+size;j++)
+		{
+			MPI_Send(&matA[part_size*i][0], n, MPI_INT, i, 0, MPI_COMM_WORLD);
 		}
 	}
-
-	// clean up
-	for(unsigned i = 0; i < tmp.size(); i++){
-		matA[i].clear();
-		matB[i].clear();
-		matC[i].clear();
-
-	}
-	matA.clear();
-	matB.clear();
-	matC.clear();
-    tmp.clear();
-
-	return 0;
 }
 
+void worker_task(int rank, int world_size)
+{
+	int n = 0;
+	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	int part_size = n / world_size;
+	if(rank == world_size -1)
+		part_size += n % world_size;
+	std::vector<std::vector<double> > matA_part(part_size);
+	std::vector<std::vector<double> > matB;
+	std::vector<std::vector<double> > matC;
+	for(int i = 0;i<part_size;i++)
+	{
+		MPI_Recv(&matA_part[i][0],)
+	}
+}
+
+int main(int argc, char **argv)
+{
+	int rank;
+	int comm_size;
+	MPI_Init(&argc,&argv);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+	//setup
+	if(rank == 0)
+	{
+		std::cout << "Comm Size:" << comm_size << std::endl;
+		main_task(rank,comm_size);
+	}
+	else
+	{
+		worker_task(rank,comm_size);
+	}
+    MPI_Finalize();
+	return 0;
+}
