@@ -11,51 +11,58 @@
 
 void main_task(int rank, int world_size)
 {
-	int n = 2000;
+	/*     m          n           n
+	 *   _____      _____       _____
+	 * 	|          |           |
+	 * l|       x m|        = l|
+	 *  |          |           |
+	 *
+	 */
+	int m = 2000;
+	int l = 1000;
+	int n = 500;
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
-//	std::vector<std::vector<double> > matC_ref;
 	std::vector<std::vector<double> > matC;
 
-//	std::vector<double> tmp_filled(2000);
-	std::vector<double> tmp(n);
-//	int x = 0;
-//	for(unsigned i = 0; i < tmp_filled.size();i++)
-//	{
-//		tmp_filled.at(i) = x;
-//		x++;
-//		if(i>10)
-//			x = 0;
-//	}
-//	for(unsigned i = 0; i < tmp.size(); i++){
-//		matA.push_back(tmp_filled);
-//		matB.push_back(tmp_filled);
-//		matC.push_back(tmp);
-//	}
-	for(unsigned i = 0; i < tmp.size(); i++){
-		matA.push_back(tmp);
-		matB.push_back(tmp);
-		matC.push_back(tmp);
+	std::vector<double> tmp_m(m);
+	std::vector<double> tmp_l(l);
+
+	for(unsigned i = 0; i < m; i++){
+		matA.push_back(tmp_l);
 	}
+	for(unsigned i = 0; i < n; i++){
+		matB.push_back(tmp_m);
+		matC.push_back(tmp_l);
+	}
+	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	int part_size = n / world_size;
-	int part_size_last = part_size + (n % world_size);
-	for(int i = 1; i<world_size;i++)
+	int part_size = n / (world_size-1);
+	int part_size_last = n % (world_size-1);
+
+	for(int i = 0; i<world_size;i++)
 	{
-		int size = part_size;
-		if(i == world_size-1)
-			size = part_size_last;
-		for(int j = part_size*i; j < part_size*i+size;j++)
-		{
-			MPI_Send(&matA[part_size*i][0], n, MPI_INT, i, 0, MPI_COMM_WORLD);
-		}
+
 	}
 }
 
 void worker_task(int rank, int world_size)
 {
+	/*     m          n           n
+	 *   _____      _____       _____
+	 * 	|          |           |
+	 * l|       x m|        = l|
+	 *  |          |           |
+	 *
+	 */
+	int m = 0;
+	int l = 0;
 	int n = 0;
+	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
 	int part_size = n / world_size;
 	if(rank == world_size -1)
 		part_size += n % world_size;
