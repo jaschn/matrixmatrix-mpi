@@ -25,6 +25,10 @@ void main_task(int rank, int world_size)
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
 
+	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
 	std::vector<double> tmp_m(m);
 	std::vector<double> tmp_l(l);
 
@@ -41,9 +45,8 @@ void main_task(int rank, int world_size)
 		matA[0][i] = i;
 	}
 
-	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+
 	int part_size = n / (world_size-1);
 	int part_size_last = n % (world_size-1);
 	std::vector<int> partitions(world_size);
@@ -73,39 +76,48 @@ void worker_task(int rank, int world_size)
 	int m = 0;
 	int l = 0;
 	int n = 0;
+	int part_size_l = 0;
+	std::vector<std::vector<double> > matA_part;
+	std::vector<std::vector<double> > matB;
+	std::vector<std::vector<double> > matC;
+
 	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-	int part_size = n / (world_size-1);
-	if(rank == world_size -1)
-		part_size = n % (world_size-1);
-	std::vector<std::vector<double> > matA_part;
-	std::vector<std::vector<double> > matB;
-	std::vector<std::vector<double> > matC;
-	std::vector<double> tmp_l_part(part_size);
+	if(l%world_size == 0)
+	{
+		part_size_l = l / world_size;
+	}
+	else
+	{
+		part_size_l = l / (world_size-1);
+		if(rank == world_size -1)
+			part_size_l = l % (world_size-1);
+	}
+
+
+	std::vector<double> tmp_l_part(part_size_l);
+
 	for(int i = 0; i < m; i++){
 		matA_part.push_back(tmp_l_part);
 	}
-	if(rank == 1)
-	{
-		std::cout << matA_part.size() << std::endl;
-		std::cout << matA_part[0].size() << std::endl;
-	}
-
+	std::cout << tmp_l_part.size() << std::endl;
+	std::cout << part_size_l << std::endl;
 	for(int i = 0;i<m;i++)
 	{
-		MPI_Scatterv(NULL,NULL,NULL ,MPI_DOUBLE, &(matA_part[m][0]), part_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		std::cout << matA_part[m].size() << std::endl;
+		MPI_Scatterv(NULL,NULL,NULL ,MPI_DOUBLE, &(matA_part[m][0]), matA_part[m].size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
 	if(rank == 1)
 	{
-		std::cout << matA_part.size() << std::endl;
-		std::cout << matA_part[0].size() << std::endl;
-		for(double & x: matA_part[0])
-		{
-			std::cout << "test" << std::endl;
-			std::cout << x << std::endl;
-		}
+//		std::cout << matA_part.size() << std::endl;
+//		std::cout << matA_part[0].size() << std::endl;
+//		for(double & x: matA_part[0])
+//		{
+//			std::cout << "test" << std::endl;
+//			std::cout << x << std::endl;
+//		}
 	}
 }
 
