@@ -26,6 +26,8 @@ void main_task(int rank, int world_size)
 	std::vector<std::vector<double> > matC;
 	int part_size_l;
 	int part_size_l_last;
+	int part_size_n;
+	int part_size_n_last;
 
 	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -42,10 +44,6 @@ void main_task(int rank, int world_size)
 		matC.push_back(tmp_l);
 	}
 
-	for(int i = 0;i<l;i++)
-	{
-		matA[5][i] = i;
-	}
 
 	if(l%world_size == 0)
 	{
@@ -56,6 +54,16 @@ void main_task(int rank, int world_size)
 	{
 		part_size_l = l / (world_size-1);
 		part_size_l_last = l % (world_size-1);
+	}
+	if(n%world_size == 0)
+	{
+		part_size_n = n / world_size;
+		part_size_n_last = part_size_n;
+	}
+	else
+	{
+		part_size_n = n / (world_size-1);
+		part_size_n_last = n % (world_size-1);
 	}
 
 	std::vector<int> partitions(world_size);
@@ -70,6 +78,15 @@ void main_task(int rank, int world_size)
 	for(int i = 0; i<m;i++)
 	{
 		MPI_Scatterv(&(matA[i][0]),&(partitions[0]),&space[0],MPI_DOUBLE, NULL,0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	}
+	for(int i = 0; i< world_size;i++)
+	{
+		int start = i*part_size_n;
+		int end = i!=world_size-1 ? (i+1) * part_size_n : i*part_size_n + part_size_n_last;
+		for(int j = start;j<end;j++)
+		{
+			MPI_Send(&matB[j][0], m, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+		}
 	}
 }
 
@@ -86,6 +103,8 @@ void worker_task(int rank, int world_size)
 	int l = 0;
 	int n = 0;
 	int part_size_l = 0;
+	int part_size_n;
+	int part_size_n_last;
 	std::vector<std::vector<double> > matA_part;
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
@@ -104,21 +123,30 @@ void worker_task(int rank, int world_size)
 		if(rank == world_size -1)
 			part_size_l = l % (world_size-1);
 	}
+	if(n%world_size == 0)
+	{
+		part_size_n = n / world_size;
+		part_size_n_last = part_size_n;
+	}
+	else
+	{
+		part_size_n = n / (world_size-1);
+		part_size_n_last = n % (world_size-1);
+	}
+
+
 	std::vector<double> tmp_l_part(part_size_l);
 	for(int i = 0; i < m; i++){
 		matA_part.push_back(tmp_l_part);
 	}
+
+
 	for(int i = 0;i<m;i++)
 	{
 		MPI_Scatterv(NULL,NULL,NULL ,MPI_DOUBLE, &(matA_part[i][0]), matA_part[i].size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-	if(rank == 1)
-	{
-		for(double & x: matA_part[5])
-		{
-			std::cout << x << std::endl;
-		}
-	}
+
+
 }
 
 int main(int argc, char **argv)
