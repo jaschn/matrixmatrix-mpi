@@ -106,7 +106,7 @@ void worker_task(int rank, int world_size)
 	int part_size_n;
 	int part_size_n_last;
 	std::vector<std::vector<double> > matA_part;
-	std::vector<std::vector<double> > matB;
+	std::vector<std::vector<double> > matB_part;
 	std::vector<std::vector<double> > matC;
 
 	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -145,7 +145,7 @@ void worker_task(int rank, int world_size)
 	{
 		MPI_Scatterv(NULL,NULL,NULL ,MPI_DOUBLE, &(matA_part[i][0]), matA_part[i].size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-
+	for(int i = 0;i< part_size_n)
 
 }
 
