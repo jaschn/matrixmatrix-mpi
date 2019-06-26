@@ -75,12 +75,14 @@ void main_task(int rank, int world_size)
 		space[i] = space[i-1] + partitions[i-1];
 	}
 	std::vector<double> tmp(part_size_l);
+	std::cout << "start" << std::endl;
 	for(int i = 0; i<m;i++)
 	{
 		MPI_Scatterv(&(matA[i][0]),&(partitions[0]),&space[0],MPI_DOUBLE, NULL,0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-	for(int i = 0; i< world_size;i++)
+	for(int i = 1; i< world_size;i++)
 	{
+		std::cout << "test: " << i << std::endl;
 		int start = i*part_size_n;
 		int end = i!=world_size-1 ? (i+1) * part_size_n : i*part_size_n + part_size_n_last;
 		for(int j = start;j<end;j++)
@@ -103,11 +105,10 @@ void worker_task(int rank, int world_size)
 	int l = 0;
 	int n = 0;
 	int part_size_l = 0;
-	int part_size_n;
-	int part_size_n_last;
+	int part_size_n = 0;
 	std::vector<std::vector<double> > matA_part;
 	std::vector<std::vector<double> > matB_part;
-	std::vector<std::vector<double> > matC;
+	std::vector<std::vector<double> > matC_part;
 
 	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -126,27 +127,53 @@ void worker_task(int rank, int world_size)
 	if(n%world_size == 0)
 	{
 		part_size_n = n / world_size;
-		part_size_n_last = part_size_n;
 	}
 	else
 	{
 		part_size_n = n / (world_size-1);
-		part_size_n_last = n % (world_size-1);
+		if(rank == world_size-1)
+			part_size_n = n % (world_size-1);
 	}
 
 
 	std::vector<double> tmp_l_part(part_size_l);
-	for(int i = 0; i < m; i++){
+	matA_part.reserve(m);
+	for(int i = 0; i < m; i++)
+	{
 		matA_part.push_back(tmp_l_part);
 	}
-
+	matA_part.reserve(n);
+	for(int i = 0; i< n;i++)
+	{
+		matC_part.push_back(tmp_l_part);
+	}
 
 	for(int i = 0;i<m;i++)
 	{
 		MPI_Scatterv(NULL,NULL,NULL ,MPI_DOUBLE, &(matA_part[i][0]), matA_part[i].size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-	for(int i = 0;i< part_size_n)
+	matB_part.reserve(part_size_n);
+	std::vector<double> tmp(m);
+	for(int i = 0;i< part_size_n;i++)
+	{
+		MPI_Status status;
+		MPI_Recv(&tmp[0],m,MPI_DOUBLE,0,0,MPI_COMM_WORLD,&status);
+		matB_part.push_back(tmp);
+	}
+	for(int i = 0;i< world_size;i++)
+	{
 
+		for(int j = 0;j<m;j++)
+		{
+			for(int k = 0;k<part_size_l;k++)
+			{
+				for(int l = 0;l<m;l++)
+				{
+					matC_part[j][k] += matA_part[l][k] * matB_part[j][l];
+				}
+			}
+		}
+	}
 }
 
 int main(int argc, char **argv)
