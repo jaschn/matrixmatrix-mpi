@@ -8,6 +8,7 @@
 #include <thread>
 #include "mpi.h"
 #include <iostream>
+#include <cstdlib>
 
 void main_task(int rank, int world_size)
 {
@@ -18,12 +19,13 @@ void main_task(int rank, int world_size)
 	 *  |          |           |
 	 *
 	 */
-	int m = 20;
-	int l = 20;
-	int n = 20;
+	int m = 2;
+	int l = 2;
+	int n = 2;
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
+	std::vector<std::vector<double> > matC_ref;
 	int part_size_l;
 	int part_size_l_last;
 	int part_size_n;
@@ -42,8 +44,30 @@ void main_task(int rank, int world_size)
 	for(int i = 0; i < n; i++){
 		matB.push_back(tmp_m);
 		matC.push_back(tmp_l);
+		matC_ref.push_back(tmp_l);
 	}
-
+	std::cout << "matA" << std::endl;
+	for(int i = 0;i<l;i++)
+	{
+		for(int j = 0;j<m;j++)
+		{
+			matA[j][i] = rand() % 4;
+			std::cout << matA[j][i] << " ";
+		}
+		std::cout << std::endl;
+	}
+	std::cout << std::endl;
+	std::cout << "matB" << std::endl;
+	for(int i = 0;i<m;i++)
+	{
+		for(int j = 0;j<n;j++)
+		{
+			matB[j][i] = rand() % 4;
+			std::cout << matB[j][i] << " ";
+		}
+		std::cout << std::endl;
+	}
+	std::cout << std::endl;
 
 	if(l%world_size == 0)
 	{
@@ -92,9 +116,9 @@ void main_task(int rank, int world_size)
 	}
 	int b_start = 0;
 	int b_end = part_size_n;
-	for(int i = world_size-1;i>=0;i--)
+	for(int i = world_size;i>0;i--)
 	{
-		if(i!=world_size-1)
+		if(i!=world_size)
 		{
 			b_start = i*part_size_n;
 			b_end = i!=world_size-1 ? (i+1) * part_size_n : i*part_size_n + part_size_n_last;
@@ -118,8 +142,47 @@ void main_task(int rank, int world_size)
 	}
 	for(int i = 0; i<m;i++)
 	{
-		MPI_Gatherv(NULL, 0, MPI_INT, &matC[i][0],&partitions[0], &space[0],  MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Gatherv(NULL, 0, MPI_INT, &matC[i][0], &partitions[0], &space[0],  MPI_INT, 0, MPI_COMM_WORLD);
 	}
+
+    for(unsigned i = 0; i < matA.size(); i++){
+		for(unsigned y = 0; y < matB.size(); y++){
+			for(unsigned z = 0; z < matB.size(); z++){
+				matC_ref[i][y] += matA[i][z] * matB[z][y];
+			}
+		}
+	}
+
+    std::cout << "matc" << std::endl;
+	for(int i = 0;i<l;i++)
+	{
+		for(int j = 0;j<n;j++)
+		{
+			std::cout << matC[j][i] << " ";
+		}
+		std::cout << std::endl;
+	}
+	std::cout << std::endl;
+    std::cout << "matc_ref" << std::endl;
+	for(int i = 0;i<l;i++)
+	{
+		for(int j = 0;j<n;j++)
+		{
+			std::cout << matC_ref[j][i] << " ";
+		}
+		std::cout << std::endl;
+	}
+	std::cout << std::endl << "equal" << std::endl;
+    bool equal = true;
+	for(int i = 0;i<n;i++)
+	{
+		for(int j = 0;j<l;j++)
+		{
+			if(matC[i][j] != matC_ref[i][j])
+				equal = false;
+		}
+	}
+	std::cout << equal << std::endl;
 }
 
 void worker_task(int rank, int world_size)
@@ -193,6 +256,7 @@ void worker_task(int rank, int world_size)
 	int b_end;
 	for(int i = 0;i< world_size;i++)
 	{
+		std::cout << i << std::endl;
 		MPI_Status status;
 		MPI_Recv(&b_start, 1,MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
 		MPI_Recv(&b_end , 1,MPI_INT, MPI_ANY_SOURCE,0, MPI_COMM_WORLD, &status);
@@ -220,6 +284,15 @@ void worker_task(int rank, int world_size)
 				MPI_Send(&matB_part[j][0], m, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
 			}
 		}
+	}
+    std::cout << "matc_part" << std::endl;
+	for(int i = 0;i<part_size_l;i++)
+	{
+		for(int j = 0;j<n;j++)
+		{
+			std::cout << matC_part[j][i] << " ";
+		}
+		std::cout << std::endl;
 	}
 	for(int i = 0;i<n;i++)
 	{
