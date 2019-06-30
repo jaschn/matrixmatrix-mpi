@@ -19,9 +19,9 @@ void main_task(int rank, int world_size)
 	 *  |          |           |
 	 *
 	 */
-	int m = 2;
-	int l = 2;
-	int n = 2;
+	int m = 4;
+	int l = 4;
+	int n = 4;
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
@@ -140,9 +140,10 @@ void main_task(int rank, int world_size)
 			MPI_Send(&matB[j][0], m, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
 		}
 	}
+
 	for(int i = 0; i<m;i++)
 	{
-		MPI_Gatherv(NULL, 0, MPI_INT, &matC[i][0], &partitions[0], &space[0],  MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Gatherv(NULL, 0, MPI_DOUBLE, &matC[i][0], &partitions[0], &space[0],  MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
 
     for(unsigned i = 0; i < matA.size(); i++){
@@ -256,7 +257,6 @@ void worker_task(int rank, int world_size)
 	int b_end;
 	for(int i = 0;i< world_size;i++)
 	{
-		std::cout << i << std::endl;
 		MPI_Status status;
 		MPI_Recv(&b_start, 1,MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
 		MPI_Recv(&b_end , 1,MPI_INT, MPI_ANY_SOURCE,0, MPI_COMM_WORLD, &status);
@@ -285,18 +285,9 @@ void worker_task(int rank, int world_size)
 			}
 		}
 	}
-    std::cout << "matc_part" << std::endl;
-	for(int i = 0;i<part_size_l;i++)
-	{
-		for(int j = 0;j<n;j++)
-		{
-			std::cout << matC_part[j][i] << " ";
-		}
-		std::cout << std::endl;
-	}
 	for(int i = 0;i<n;i++)
 	{
-		MPI_Gatherv(&matC_part[i][0],part_size_l, MPI_INT, NULL, NULL, NULL, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Gatherv(&matC_part[i][0],part_size_l, MPI_DOUBLE, NULL, NULL, NULL, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
 }
 
