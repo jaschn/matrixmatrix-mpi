@@ -9,6 +9,7 @@
 #include "mpi.h"
 #include <iostream>
 #include <cstdlib>
+#include "omp.h"
 
 void main_task(int rank, int world_size)
 {
@@ -19,9 +20,9 @@ void main_task(int rank, int world_size)
 	 *  |          |           |
 	 *
 	 */
-	int m = 4;
-	int l = 4;
-	int n = 4;
+	int m = 100;
+	int l = 200;
+	int n = 300;
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
@@ -46,28 +47,20 @@ void main_task(int rank, int world_size)
 		matC.push_back(tmp_l);
 		matC_ref.push_back(tmp_l);
 	}
-	std::cout << "matA" << std::endl;
 	for(int i = 0;i<l;i++)
 	{
 		for(int j = 0;j<m;j++)
 		{
-			matA[j][i] = rand() % 4;
-			std::cout << matA[j][i] << " ";
+			matA[j][i] = rand() % 100;
 		}
-		std::cout << std::endl;
 	}
-	std::cout << std::endl;
-	std::cout << "matB" << std::endl;
 	for(int i = 0;i<m;i++)
 	{
 		for(int j = 0;j<n;j++)
 		{
-			matB[j][i] = rand() % 4;
-			std::cout << matB[j][i] << " ";
+			matB[j][i] = rand() % 100;
 		}
-		std::cout << std::endl;
 	}
-	std::cout << std::endl;
 
 	if(l%world_size == 0)
 	{
@@ -89,7 +82,7 @@ void main_task(int rank, int world_size)
 		part_size_n = n / (world_size-1);
 		part_size_n_last = n % (world_size-1);
 	}
-
+	std::cout << "initialized" << std::endl;
 	std::vector<int> partitions(world_size);
 	std::fill(partitions.begin(), partitions.end(),part_size_l);
 	partitions[world_size-1] = part_size_l_last;
@@ -98,7 +91,6 @@ void main_task(int rank, int world_size)
 	{
 		space[i] = space[i-1] + partitions[i-1];
 	}
-	std::vector<double> tmp(part_size_l);
 	for(int i = 0; i<m;i++)
 	{
 		MPI_Scatterv(&(matA[i][0]),&partitions[0],&space[0],MPI_DOUBLE, NULL,0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -145,35 +137,16 @@ void main_task(int rank, int world_size)
 	{
 		MPI_Gatherv(NULL, 0, MPI_DOUBLE, &matC[i][0], &partitions[0], &space[0],  MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-
+	std::cout << "finished" << std::endl << "calculate reference with "<< world_size << " threads" << std::endl;
+omp_set_num_threads(world_size);
+#pragma omp parallel for
     for(unsigned i = 0; i < matA.size(); i++){
 		for(unsigned y = 0; y < matB.size(); y++){
 			for(unsigned z = 0; z < matB.size(); z++){
-				matC_ref[i][y] += matA[i][z] * matB[z][y];
+				matC_ref[i][y] += matA[z][y] * matB[i][z];
 			}
 		}
 	}
-
-    std::cout << "matc" << std::endl;
-	for(int i = 0;i<l;i++)
-	{
-		for(int j = 0;j<n;j++)
-		{
-			std::cout << matC[j][i] << " ";
-		}
-		std::cout << std::endl;
-	}
-	std::cout << std::endl;
-    std::cout << "matc_ref" << std::endl;
-	for(int i = 0;i<l;i++)
-	{
-		for(int j = 0;j<n;j++)
-		{
-			std::cout << matC_ref[j][i] << " ";
-		}
-		std::cout << std::endl;
-	}
-	std::cout << std::endl << "equal" << std::endl;
     bool equal = true;
 	for(int i = 0;i<n;i++)
 	{
@@ -183,7 +156,10 @@ void main_task(int rank, int world_size)
 				equal = false;
 		}
 	}
-	std::cout << equal << std::endl;
+	if(equal)
+		std::cout << "both are equal" << std::endl;
+	else
+		std::cout << "not equal";
 }
 
 void worker_task(int rank, int world_size)
