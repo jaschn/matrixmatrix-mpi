@@ -20,9 +20,9 @@ void main_task(int rank, int world_size)
 	 *  |          |           |
 	 *
 	 */
-	int m = 100;
-	int l = 200;
-	int n = 300;
+	int m = 20;
+	int l = 30;
+	int n = 10;
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
@@ -81,6 +81,7 @@ void main_task(int rank, int world_size)
 	{
 		part_size_n = n / (world_size-1);
 		part_size_n_last = n % (world_size-1);
+		std::cout << "test" << std::endl;
 	}
 	std::cout << "initialized" << std::endl;
 	std::vector<int> partitions(world_size);
@@ -95,6 +96,7 @@ void main_task(int rank, int world_size)
 	{
 		MPI_Scatterv(&(matA[i][0]),&partitions[0],&space[0],MPI_DOUBLE, NULL,0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
+	std::cout << n << " " << part_size_n << " " << part_size_n_last << std::endl;
 	for(int i = 1; i< world_size;i++)
 	{
 		int start = i*part_size_n;
@@ -133,16 +135,16 @@ void main_task(int rank, int world_size)
 		}
 	}
 
-	for(int i = 0; i<m;i++)
+	for(int i = 0; i<n;i++)
 	{
 		MPI_Gatherv(NULL, 0, MPI_DOUBLE, &matC[i][0], &partitions[0], &space[0],  MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
 	std::cout << "finished" << std::endl << "calculate reference with "<< world_size << " threads" << std::endl;
 omp_set_num_threads(world_size);
 #pragma omp parallel for
-    for(unsigned i = 0; i < matA.size(); i++){
-		for(unsigned y = 0; y < matB.size(); y++){
-			for(unsigned z = 0; z < matB.size(); z++){
+    for(unsigned i = 0; i < matB.size(); i++){
+		for(unsigned y = 0; y < matA[0].size(); y++){
+			for(unsigned z = 0; z < matA.size(); z++){
 				matC_ref[i][y] += matA[z][y] * matB[i][z];
 			}
 		}
@@ -153,13 +155,16 @@ omp_set_num_threads(world_size);
 		for(int j = 0;j<l;j++)
 		{
 			if(matC[i][j] != matC_ref[i][j])
+			{
 				equal = false;
+				//std::cout << i << " " << j << std::endl;
+			}
 		}
 	}
 	if(equal)
 		std::cout << "both are equal" << std::endl;
 	else
-		std::cout << "not equal";
+		std::cout << "not equal" << std::endl;
 }
 
 void worker_task(int rank, int world_size)
