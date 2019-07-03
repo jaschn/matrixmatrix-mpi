@@ -31,10 +31,41 @@ void main_task(int rank, int world_size)
 	int part_size_l_last;
 	int part_size_n;
 	int part_size_n_last;
+	int part_size_n_max;
+
+	if(l%world_size == 0)
+	{
+		part_size_l = l / world_size;
+		part_size_l_last = part_size_l;
+	}
+	else
+	{
+		part_size_l = l / (world_size-1);
+		part_size_l_last = l % (world_size-1);
+	}
+	if(n%world_size == 0)
+	{
+		part_size_n = n / world_size;
+		part_size_n_last = part_size_n;
+	}
+	else
+	{
+		part_size_n = n / (world_size-1);
+		part_size_n_last = n % (world_size-1);
+	}
+	if(part_size_n == 0 || part_size_l == 0)
+	{
+		std::cout << "to many processes for the specified matrix size" << std::endl << "Aborting" << std::endl;
+		MPI_Abort(MPI_COMM_WORLD,1);
+	}
+	part_size_n_max = std::max(part_size_n,part_size_n_last);
 
 	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Bcast(&part_size_l, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Bcast(&part_size_l_last, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Bcast(&part_size_n_max, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
 	std::vector<double> tmp_m(m);
 	std::vector<double> tmp_l(l);
@@ -61,28 +92,6 @@ void main_task(int rank, int world_size)
 			matB[j][i] = rand() % 100;
 		}
 	}
-
-	if(l%world_size == 0)
-	{
-		part_size_l = l / world_size;
-		part_size_l_last = part_size_l;
-	}
-	else
-	{
-		part_size_l = l / (world_size-1);
-		part_size_l_last = l % (world_size-1);
-	}
-	if(n%world_size == 0)
-	{
-		part_size_n = n / world_size;
-		part_size_n_last = part_size_n;
-	}
-	else
-	{
-		part_size_n = n / (world_size-1);
-		part_size_n_last = n % (world_size-1);
-		std::cout << "test" << std::endl;
-	}
 	std::cout << "initialized" << std::endl;
 	std::vector<int> partitions(world_size);
 	std::fill(partitions.begin(), partitions.end(),part_size_l);
@@ -96,7 +105,6 @@ void main_task(int rank, int world_size)
 	{
 		MPI_Scatterv(&(matA[i][0]),&partitions[0],&space[0],MPI_DOUBLE, NULL,0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-	std::cout << n << " " << part_size_n << " " << part_size_n_last << std::endl;
 	for(int i = 1; i< world_size;i++)
 	{
 		int start = i*part_size_n;
@@ -105,7 +113,7 @@ void main_task(int rank, int world_size)
 		MPI_Send(&end, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
 		for(int j = start;j<end;j++)
 		{
-			MPI_Send(&matB[j][0], m, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+			MPI_Send(&matB[j][0], matB[j].size(), MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
 		}
 	}
 	int b_start = 0;
@@ -117,6 +125,7 @@ void main_task(int rank, int world_size)
 			b_start = i*part_size_n;
 			b_end = i!=world_size-1 ? (i+1) * part_size_n : i*part_size_n + part_size_n_last;
 		}
+		MPI_Barrier(MPI_COMM_WORLD);
 		for(int j = b_start;j<b_end;j++)
 		{
 			for(int k = 0;k<part_size_l;k++)
@@ -131,10 +140,9 @@ void main_task(int rank, int world_size)
 		MPI_Send(&b_end, 1, MPI_INT, rank+1, 0, MPI_COMM_WORLD);
 		for(int j = b_start;j<b_end;j++)
 		{
-			MPI_Send(&matB[j][0], m, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
+			MPI_Send(&matB[j][0], matB[j].size(), MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
 		}
 	}
-
 	for(int i = 0; i<n;i++)
 	{
 		MPI_Gatherv(NULL, 0, MPI_DOUBLE, &matC[i][0], &partitions[0], &space[0],  MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -157,7 +165,6 @@ omp_set_num_threads(world_size);
 			if(matC[i][j] != matC_ref[i][j])
 			{
 				equal = false;
-				//std::cout << i << " " << j << std::endl;
 			}
 		}
 	}
@@ -180,37 +187,25 @@ void worker_task(int rank, int world_size)
 	int l = 0;
 	int n = 0;
 	int part_size_l = 0;
-	int part_size_n;
-	int part_size_n_last;
+	int part_size_n = 0;
 	std::vector<std::vector<double> > matA_part;
 	std::vector<std::vector<double> > matB_part;
 	std::vector<std::vector<double> > matC_part;
+	{
+		int p_l;
+		int p_l_last;
+		MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&p_l, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&p_l_last, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&part_size_n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-	if(l%world_size == 0)
-	{
-		part_size_l = l / world_size;
+		if(rank == world_size-1)
+			part_size_l = p_l_last;
+		else
+			part_size_l = p_l;
 	}
-	else
-	{
-		part_size_l = l / (world_size-1);
-		if(rank == world_size -1)
-			part_size_l = l % (world_size-1);
-	}
-	if(n%world_size == 0)
-	{
-		part_size_n = n / world_size;
-		part_size_n_last = part_size_n;
-	}
-	else
-	{
-		part_size_n = n / (world_size-1);
-		part_size_n_last = n % (world_size-1);
-	}
-
 
 	std::vector<double> tmp_l_part(part_size_l);
 	matA_part.reserve(m);
@@ -236,6 +231,7 @@ void worker_task(int rank, int world_size)
 	}
 	int b_start;
 	int b_end;
+
 	for(int i = 0;i< world_size;i++)
 	{
 		MPI_Status status;
@@ -243,9 +239,10 @@ void worker_task(int rank, int world_size)
 		MPI_Recv(&b_end , 1,MPI_INT, MPI_ANY_SOURCE,0, MPI_COMM_WORLD, &status);
 		for(int i = 0;i< b_end-b_start;i++)
 		{
-			MPI_Recv(&tmp[0],m,MPI_DOUBLE, MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
+			MPI_Recv(&tmp[0],tmp.size(),MPI_DOUBLE, MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
 			matB_part[i] = tmp;
 		}
+		MPI_Barrier(MPI_COMM_WORLD);
 		for(int j = b_start;j<b_end;j++)
 		{
 			for(int k = 0;k<part_size_l;k++)
@@ -262,7 +259,7 @@ void worker_task(int rank, int world_size)
 			MPI_Send(&b_end, 1, MPI_INT, rank+1, 0, MPI_COMM_WORLD);
 			for(int j = 0;j<b_end-b_start;j++)
 			{
-				MPI_Send(&matB_part[j][0], m, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
+				MPI_Send(&matB_part[j][0], matB_part[j].size(), MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
 			}
 		}
 	}
