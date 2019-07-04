@@ -10,6 +10,7 @@
 #include <iostream>
 #include <cstdlib>
 #include "omp.h"
+#include <chrono>
 
 void main_task(int rank, int world_size)
 {
@@ -20,9 +21,9 @@ void main_task(int rank, int world_size)
 	 *  |          |           |
 	 *
 	 */
-	int m = 20;
-	int l = 30;
-	int n = 10;
+	int m = 1000;
+	int l = 1000;
+	int n = 1000;
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
@@ -32,7 +33,34 @@ void main_task(int rank, int world_size)
 	int part_size_n;
 	int part_size_n_last;
 	int part_size_n_max;
+	std::vector<double> tmp_m(m);
+	std::vector<double> tmp_l(l);
 
+	for(int i = 0; i < m; i++){
+		matA.push_back(tmp_l);
+	}
+	for(int i = 0; i < n; i++){
+		matB.push_back(tmp_m);
+		matC.push_back(tmp_l);
+		matC_ref.push_back(tmp_l);
+	}
+	for(int i = 0;i<l;i++)
+	{
+		for(int j = 0;j<m;j++)
+		{
+			matA[j][i] = rand() % 100;
+		}
+	}
+	for(int i = 0;i<m;i++)
+	{
+		for(int j = 0;j<n;j++)
+		{
+			matB[j][i] = rand() % 100;
+		}
+	}
+	std::cout << "initialized" << std::endl;
+	std::cout << "calculate matrix using MPI. World Size: " << world_size << std::endl;
+	auto start = std::chrono::high_resolution_clock::now();
 	if(l%world_size == 0)
 	{
 		part_size_l = l / world_size;
@@ -67,32 +95,6 @@ void main_task(int rank, int world_size)
 	MPI_Bcast(&part_size_l_last, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&part_size_n_max, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-	std::vector<double> tmp_m(m);
-	std::vector<double> tmp_l(l);
-
-	for(int i = 0; i < m; i++){
-		matA.push_back(tmp_l);
-	}
-	for(int i = 0; i < n; i++){
-		matB.push_back(tmp_m);
-		matC.push_back(tmp_l);
-		matC_ref.push_back(tmp_l);
-	}
-	for(int i = 0;i<l;i++)
-	{
-		for(int j = 0;j<m;j++)
-		{
-			matA[j][i] = rand() % 100;
-		}
-	}
-	for(int i = 0;i<m;i++)
-	{
-		for(int j = 0;j<n;j++)
-		{
-			matB[j][i] = rand() % 100;
-		}
-	}
-	std::cout << "initialized" << std::endl;
 	std::vector<int> partitions(world_size);
 	std::fill(partitions.begin(), partitions.end(),part_size_l);
 	partitions[world_size-1] = part_size_l_last;
@@ -116,6 +118,7 @@ void main_task(int rank, int world_size)
 			MPI_Send(&matB[j][0], matB[j].size(), MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
 		}
 	}
+	MPI_Barrier(MPI_COMM_WORLD);
 	int b_start = 0;
 	int b_end = part_size_n;
 	for(int i = world_size;i>0;i--)
@@ -125,7 +128,7 @@ void main_task(int rank, int world_size)
 			b_start = i*part_size_n;
 			b_end = i!=world_size-1 ? (i+1) * part_size_n : i*part_size_n + part_size_n_last;
 		}
-		MPI_Barrier(MPI_COMM_WORLD);
+
 		for(int j = b_start;j<b_end;j++)
 		{
 			for(int k = 0;k<part_size_l;k++)
@@ -147,8 +150,15 @@ void main_task(int rank, int world_size)
 	{
 		MPI_Gatherv(NULL, 0, MPI_DOUBLE, &matC[i][0], &partitions[0], &space[0],  MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-	std::cout << "finished" << std::endl << "calculate reference with "<< world_size << " threads" << std::endl;
-omp_set_num_threads(world_size);
+	auto finish = std::chrono::high_resolution_clock::now();
+	std::cout << "finished" << std::endl;
+	auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(finish-start);
+	std::cout << milliseconds.count() << " ms" << std::endl;
+
+	std::cout << "Calculate reference with " << world_size << " threads." << std::endl;
+	start = std::chrono::high_resolution_clock::now();
+
+	omp_set_num_threads(world_size);
 #pragma omp parallel for
     for(unsigned i = 0; i < matB.size(); i++){
 		for(unsigned y = 0; y < matA[0].size(); y++){
@@ -157,6 +167,10 @@ omp_set_num_threads(world_size);
 			}
 		}
 	}
+
+    finish = std::chrono::high_resolution_clock::now();
+    milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(finish-start);
+	std::cout << milliseconds.count() << " ms" << std::endl;
     bool equal = true;
 	for(int i = 0;i<n;i++)
 	{
@@ -187,7 +201,9 @@ void worker_task(int rank, int world_size)
 	int l = 0;
 	int n = 0;
 	int part_size_l = 0;
-	int part_size_n = 0;
+	int part_size_n_max = 0;
+	int b_start;
+	int b_end;
 	std::vector<std::vector<double> > matA_part;
 	std::vector<std::vector<double> > matB_part;
 	std::vector<std::vector<double> > matC_part;
@@ -199,7 +215,7 @@ void worker_task(int rank, int world_size)
 		MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&p_l, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&p_l_last, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		MPI_Bcast(&part_size_n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&part_size_n_max, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
 		if(rank == world_size-1)
 			part_size_l = p_l_last;
@@ -213,25 +229,23 @@ void worker_task(int rank, int world_size)
 	{
 		matA_part.push_back(tmp_l_part);
 	}
-	matA_part.reserve(n);
+	matC_part.reserve(n);
 	for(int i = 0; i< n;i++)
 	{
 		matC_part.push_back(tmp_l_part);
+	}
+	matB_part.reserve(part_size_n_max);
+	std::vector<double> tmp(m);
+	for(int i = 0;i<part_size_n_max;i++)
+	{
+		matB_part.push_back(tmp);
 	}
 
 	for(int i = 0;i<m;i++)
 	{
 		MPI_Scatterv(NULL,NULL,NULL ,MPI_DOUBLE, &(matA_part[i][0]), matA_part[i].size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-	matB_part.reserve(part_size_n);
-	std::vector<double> tmp(m);
-	for(int i = 0;i<part_size_n;i++)
-	{
-		matB_part.push_back(tmp);
-	}
-	int b_start;
-	int b_end;
-
+	MPI_Barrier(MPI_COMM_WORLD);
 	for(int i = 0;i< world_size;i++)
 	{
 		MPI_Status status;
@@ -242,7 +256,7 @@ void worker_task(int rank, int world_size)
 			MPI_Recv(&tmp[0],tmp.size(),MPI_DOUBLE, MPI_ANY_SOURCE,0,MPI_COMM_WORLD,&status);
 			matB_part[i] = tmp;
 		}
-		MPI_Barrier(MPI_COMM_WORLD);
+
 		for(int j = b_start;j<b_end;j++)
 		{
 			for(int k = 0;k<part_size_l;k++)
