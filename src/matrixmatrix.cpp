@@ -12,6 +12,55 @@
 #include "omp.h"
 #include <chrono>
 
+std::chrono::time_point<std::chrono::high_resolution_clock> start;
+std::chrono::time_point<std::chrono::high_resolution_clock> finish;
+std::chrono::milliseconds milliseconds;
+void start_timer()
+{
+
+	start = std::chrono::high_resolution_clock::now();
+}
+
+void stop_timer(std::string name)
+{
+    finish = std::chrono::high_resolution_clock::now();
+    milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(finish-start);
+	std::cout << name << " took " <<  milliseconds.count() << " ms" << std::endl;
+}
+
+void check_with_reference(std::vector<std::vector<double>> &matA, std::vector<std::vector<double>> &matB,
+						  std::vector<std::vector<double>> &matC, std::vector<std::vector<double>> &matC_ref, int world_size)
+{
+	std::cout << "Calculate reference with " << world_size << " threads." << std::endl;
+	start_timer();
+	omp_set_num_threads(world_size);
+#pragma omp parallel for
+    for(unsigned i = 0; i < matB.size(); i++){
+		for(unsigned y = 0; y < matA[0].size(); y++){
+			for(unsigned z = 0; z < matA.size(); z++){
+				matC_ref[i][y] += matA[z][y] * matB[i][z];
+			}
+		}
+	}
+    stop_timer("omp");
+
+    bool equal = true;
+	for(unsigned i = 0;i<matC.size();i++)
+	{
+		for(unsigned j = 0;j<matC[0].size();j++)
+		{
+			if(matC[i][j] != matC_ref[i][j])
+			{
+				equal = false;
+			}
+		}
+	}
+	if(equal)
+		std::cout << "both are equal" << std::endl;
+	else
+		std::cout << "not equal" << std::endl;
+}
+
 void main_task(int rank, int world_size)
 {
 	/*     m          n           n
@@ -21,9 +70,9 @@ void main_task(int rank, int world_size)
 	 *  |          |           |
 	 *
 	 */
-	int m = 1000;
-	int l = 1000;
-	int n = 1000;
+	int m = 1500;
+	int l = 1500;
+	int n = 1500;
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
@@ -58,9 +107,11 @@ void main_task(int rank, int world_size)
 			matB[j][i] = rand() % 100;
 		}
 	}
+
+
 	std::cout << "initialized" << std::endl;
 	std::cout << "calculate matrix using MPI. World Size: " << world_size << std::endl;
-	auto start = std::chrono::high_resolution_clock::now();
+	start_timer();
 	if(l%world_size == 0)
 	{
 		part_size_l = l / world_size;
@@ -81,11 +132,6 @@ void main_task(int rank, int world_size)
 		part_size_n = n / (world_size-1);
 		part_size_n_last = n % (world_size-1);
 	}
-	if(part_size_n == 0 || part_size_l == 0)
-	{
-		std::cout << "to many processes for the specified matrix size" << std::endl << "Aborting" << std::endl;
-		MPI_Abort(MPI_COMM_WORLD,1);
-	}
 	part_size_n_max = std::max(part_size_n,part_size_n_last);
 
 	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -103,6 +149,7 @@ void main_task(int rank, int world_size)
 	{
 		space[i] = space[i-1] + partitions[i-1];
 	}
+
 	for(int i = 0; i<m;i++)
 	{
 		MPI_Scatterv(&(matA[i][0]),&partitions[0],&space[0],MPI_DOUBLE, NULL,0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -150,42 +197,9 @@ void main_task(int rank, int world_size)
 	{
 		MPI_Gatherv(NULL, 0, MPI_DOUBLE, &matC[i][0], &partitions[0], &space[0],  MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
-	auto finish = std::chrono::high_resolution_clock::now();
+	stop_timer("MPI");
 	std::cout << "finished" << std::endl;
-	auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(finish-start);
-	std::cout << milliseconds.count() << " ms" << std::endl;
-
-	std::cout << "Calculate reference with " << world_size << " threads." << std::endl;
-	start = std::chrono::high_resolution_clock::now();
-
-	omp_set_num_threads(world_size);
-#pragma omp parallel for
-    for(unsigned i = 0; i < matB.size(); i++){
-		for(unsigned y = 0; y < matA[0].size(); y++){
-			for(unsigned z = 0; z < matA.size(); z++){
-				matC_ref[i][y] += matA[z][y] * matB[i][z];
-			}
-		}
-	}
-
-    finish = std::chrono::high_resolution_clock::now();
-    milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(finish-start);
-	std::cout << milliseconds.count() << " ms" << std::endl;
-    bool equal = true;
-	for(int i = 0;i<n;i++)
-	{
-		for(int j = 0;j<l;j++)
-		{
-			if(matC[i][j] != matC_ref[i][j])
-			{
-				equal = false;
-			}
-		}
-	}
-	if(equal)
-		std::cout << "both are equal" << std::endl;
-	else
-		std::cout << "not equal" << std::endl;
+	check_with_reference(matA,matB,matC,matC_ref,world_size);
 }
 
 void worker_task(int rank, int world_size)
@@ -222,8 +236,9 @@ void worker_task(int rank, int world_size)
 		else
 			part_size_l = p_l;
 	}
-
 	std::vector<double> tmp_l_part(part_size_l);
+	std::vector<double> tmp(m);
+
 	matA_part.reserve(m);
 	for(int i = 0; i < m; i++)
 	{
@@ -235,7 +250,6 @@ void worker_task(int rank, int world_size)
 		matC_part.push_back(tmp_l_part);
 	}
 	matB_part.reserve(part_size_n_max);
-	std::vector<double> tmp(m);
 	for(int i = 0;i<part_size_n_max;i++)
 	{
 		matB_part.push_back(tmp);
