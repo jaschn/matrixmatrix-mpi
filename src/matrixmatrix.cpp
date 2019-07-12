@@ -70,9 +70,9 @@ void main_task(int rank, int world_size)
 	 *  |          |           |
 	 *
 	 */
-	int m = 1500;
-	int l = 1500;
-	int n = 1500;
+	int m = 1000;
+	int l = 1000;
+	int n = 1000;
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
@@ -186,11 +186,14 @@ void main_task(int rank, int world_size)
 				}
 			}
 		}
-		MPI_Send(&b_start, 1, MPI_INT, rank+1, 0, MPI_COMM_WORLD);
-		MPI_Send(&b_end, 1, MPI_INT, rank+1, 0, MPI_COMM_WORLD);
-		for(int j = b_start;j<b_end;j++)
+		if(world_size > 1)
 		{
-			MPI_Send(&matB[j][0], matB[j].size(), MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
+			MPI_Send(&b_start, 1, MPI_INT, rank+1, 0, MPI_COMM_WORLD);
+			MPI_Send(&b_end, 1, MPI_INT, rank+1, 0, MPI_COMM_WORLD);
+			for(int j = b_start;j<b_end;j++)
+			{
+				MPI_Send(&matB[j][0], matB[j].size(), MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
+			}
 		}
 	}
 	for(int i = 0; i<n;i++)
@@ -199,6 +202,7 @@ void main_task(int rank, int world_size)
 	}
 	stop_timer("MPI");
 	std::cout << "finished" << std::endl;
+    MPI_Finalize();
 	check_with_reference(matA,matB,matC,matC_ref,world_size);
 }
 
@@ -295,6 +299,7 @@ void worker_task(int rank, int world_size)
 	{
 		MPI_Gatherv(&matC_part[i][0],part_size_l, MPI_DOUBLE, NULL, NULL, NULL, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	}
+    MPI_Finalize();
 }
 
 int main(int argc, char **argv)
@@ -314,6 +319,5 @@ int main(int argc, char **argv)
 	{
 		worker_task(rank,comm_size);
 	}
-    MPI_Finalize();
 	return 0;
 }
