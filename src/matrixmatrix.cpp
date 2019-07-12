@@ -61,6 +61,32 @@ void check_with_reference(std::vector<std::vector<double>> &matA, std::vector<st
 		std::cout << "not equal" << std::endl;
 }
 
+void get_dimensions(int &m, int &l, int &n, bool &check_reference)
+{
+	std::string check_ref;
+	std::cout << "     m          n           n" << std::endl
+			  << "   _____      _____       _____" << std::endl
+			  << "  |          |           |" << std::endl
+			  << " l|       x m|        = l|" << std::endl
+			  << "  |          |           |" << std::endl << std::endl;
+	std::cout << "m: ";
+	std::cin >> m;
+	std::cout << "l: ";
+	std::cin >> l;
+	std::cout << "n: ";
+	std::cin >> n;
+	std::cout << "Calculate Reference? [y/n]";
+	std::cin >> check_ref;
+	if(check_ref == "y" || check_ref == "Y")
+	{
+		check_reference = true;
+	}
+	else
+	{
+		check_reference = false;
+	}
+}
+
 void main_task(int rank, int world_size)
 {
 	/*     m          n           n
@@ -73,6 +99,8 @@ void main_task(int rank, int world_size)
 	int m = 1000;
 	int l = 1000;
 	int n = 1000;
+	bool check_ref;
+	get_dimensions(m,l,n,check_ref);
 	std::vector<std::vector<double> > matA;
 	std::vector<std::vector<double> > matB;
 	std::vector<std::vector<double> > matC;
@@ -135,7 +163,6 @@ void main_task(int rank, int world_size)
 	part_size_n_max = std::max(part_size_n,part_size_n_last);
 
 	MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&part_size_l, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&part_size_l_last, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -203,7 +230,8 @@ void main_task(int rank, int world_size)
 	stop_timer("MPI");
 	std::cout << "finished" << std::endl;
     MPI_Finalize();
-	check_with_reference(matA,matB,matC,matC_ref,world_size);
+    if(check_ref)
+    	check_with_reference(matA,matB,matC,matC_ref,world_size);
 }
 
 void worker_task(int rank, int world_size)
@@ -216,7 +244,6 @@ void worker_task(int rank, int world_size)
 	 *
 	 */
 	int m = 0;
-	int l = 0;
 	int n = 0;
 	int part_size_l = 0;
 	int part_size_n_max = 0;
@@ -229,7 +256,6 @@ void worker_task(int rank, int world_size)
 		int p_l;
 		int p_l_last;
 		MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		MPI_Bcast(&l, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&p_l, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&p_l_last, 1, MPI_INT, 0, MPI_COMM_WORLD);
