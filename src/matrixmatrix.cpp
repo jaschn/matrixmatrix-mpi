@@ -1,9 +1,3 @@
-/*
- * main.cpp
- *
- *  Created on: 13.05.2019
- *      Author: rene
- */
 #include <vector>
 #include <thread>
 #include "mpi.h"
